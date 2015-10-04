@@ -30,7 +30,7 @@ int alnum_strcmp(const String str1, const String str2);
 int alnum_strcmp_reversed(const String str1, const String str2);
 int get_next_alnum_symbol(const char* str, int start_pos);
 int get_next_alnum_symbol_reversed(const char* str, int start_pos);
-void sort_lines(String* lines, int len, int (*compare)(const String str1, const String str2));
+int sort_lines(String* lines, int left, int right, int (*compare)(const String str1, const String str2));
 void make_sorted_buffer(String* lines, int lines_len, char* sorted_buffer);
 int string_ctor(String* This, const char* str);
 int string_destruct(String* This);
@@ -49,12 +49,12 @@ int main()
 
     char* sorted_buffer = (char*) calloc(buffer_len, sizeof(*sorted_buffer));
 
-    sort_lines(lines, lines_count, alnum_strcmp);
+    sort_lines(lines, 0, lines_count - 1, alnum_strcmp);
     make_sorted_buffer(lines, lines_count, sorted_buffer);
     save_file(FILENAME_WRITE_SORTED, sorted_buffer, buffer_len);
     printf("Sorted Onegin was written to %s\n", FILENAME_WRITE_SORTED);
 
-    sort_lines(lines, lines_count, alnum_strcmp_reversed);
+    sort_lines(lines, 0, lines_count - 1, alnum_strcmp_reversed);
     make_sorted_buffer(lines, lines_count, sorted_buffer);
     save_file(FILENAME_WRITE_BACKSORTED, sorted_buffer, buffer_len);
     printf("Backsorted Onegin was written to %s\n", FILENAME_WRITE_BACKSORTED);
@@ -220,22 +220,33 @@ int get_next_alnum_symbol(const char* str, int start_pos)
     return start_pos - 1;
 }
 
-//TODO: write qsort here
-void sort_lines(String* lines, int len, int (*compare)(const String str1, const String str2))
+int sort_lines(String* lines, int left, int right, int (*compare)(const String str1, const String str2))
 {
-    for (int i = 0; i < len - 1; ++i)
+    int left_backup = left;
+    int right_backup = right;
+    String temp_for_swap = {"", 0};
+    String mid = lines[(left + right) / 2];
+    while (left <= right)
     {
-        for (int j = 0; j < len - i - 1; ++j)
+        while (((*compare)(lines[left], mid) < 0) && (left <= right_backup))
+            left++;
+        while (((*compare)(lines[right], mid) > 0) && (right >= left_backup))
+            right--;
+        if (left <= right)
         {
-            if ((*compare)(lines[j], lines[j + 1]) > 0)
-            {
-                String backup = lines[j];
-                lines[j] = lines[j + 1];
-                lines[j + 1] = backup;
-            }
+            temp_for_swap = lines[left];
+            lines[left] = lines[right];
+            lines[right] = temp_for_swap;
+            left++;
+            right--;
         }
     }
- }
+    if (right > left_backup)
+        sort_lines(lines, left_backup, right, compare);
+    if (left < right_backup)
+        sort_lines(lines, left, right_backup, compare);
+    return 0;
+}
 
 void make_sorted_buffer(String* lines, int lines_len, char* sorted_buffer)
 {
