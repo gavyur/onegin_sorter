@@ -3,15 +3,9 @@
 #include <stdlib.h>
 #include <ctype.h>
 
-#define DO_REVERSED_SORT 0
 #define FILENAME_READ "onegin.txt"
-#define FILENAME_WRITE "onegin_sorted.txt"
-
-#if DO_REVERSED_SORT == 1
-    #define STRCMP alnum_strcmp_reversed
-#else
-    #define STRCMP alnum_strcmp
-#endif // IS_REVERSED_SORT
+#define FILENAME_WRITE_SORTED "onegin_sorted.txt"
+#define FILENAME_WRITE_BACKSORTED "onegin_backsorted.txt"
 
 //cp1251
 #define START_UPPER_LETTERS -64
@@ -23,15 +17,24 @@
 #define MY_NAME "GavYur"
 #define GREET(program, version) printf("#--- " program " v" version " (%s %s) by " MY_NAME "\n\n", __DATE__, __TIME__)
 
+typedef struct
+{
+    char* str;
+    int length;
+} String;
+
 int read_file(const char* filename, char** buf_addr, int* len);
 int save_file(const char* filename, char* buffer, int buffer_len);
-char** split_by_lines(char* buffer, int len, int* lines_count);
-int alnum_strcmp(const char* str1, const char* str2);
-int alnum_strcmp_reversed(const char* str1, const char* str2);
+String* split_by_lines(char* buffer, int len, int* lines_count);
+int alnum_strcmp(const String str1, const String str2);
+int alnum_strcmp_reversed(const String str1, const String str2);
 int get_next_alnum_symbol(const char* str, int start_pos);
 int get_next_alnum_symbol_reversed(const char* str, int start_pos);
-void sort_lines(char** lines, int len);
-void make_sorted_buffer(char** lines, int lines_len, char* sorted_buffer);
+void sort_lines(String* lines, int len, int (*compare)(const String str1, const String str2));
+void make_sorted_buffer(String* lines, int lines_len, char* sorted_buffer);
+int string_ctor(String* This, const char* str);
+int string_destruct(String* This);
+int cleanup(String* lines, int lines_count, char* sorted_buffer);
 
 int main()
 {
@@ -42,16 +45,47 @@ int main()
     if (read_file(FILENAME_READ, (char**) &(buffer), &buffer_len))
         return 1;
     int lines_count = 0;
-    char** lines = split_by_lines((char*) buffer, buffer_len, &lines_count);
-    sort_lines(lines, lines_count);
-    char* sorted_buffer = (char*) calloc(buffer_len, sizeof(*sorted_buffer));
-    make_sorted_buffer(lines, lines_count, sorted_buffer);
-    save_file(FILENAME_WRITE, sorted_buffer, buffer_len);
-    printf("Sorted Onegin was written to %s\n", FILENAME_WRITE);
+    String* lines = split_by_lines((char*) buffer, buffer_len, &lines_count);
 
-    free(lines[0]);
+    char* sorted_buffer = (char*) calloc(buffer_len, sizeof(*sorted_buffer));
+
+    sort_lines(lines, lines_count, alnum_strcmp);
+    make_sorted_buffer(lines, lines_count, sorted_buffer);
+    save_file(FILENAME_WRITE_SORTED, sorted_buffer, buffer_len);
+    printf("Sorted Onegin was written to %s\n", FILENAME_WRITE_SORTED);
+
+    sort_lines(lines, lines_count, alnum_strcmp_reversed);
+    make_sorted_buffer(lines, lines_count, sorted_buffer);
+    save_file(FILENAME_WRITE_BACKSORTED, sorted_buffer, buffer_len);
+    printf("Backsorted Onegin was written to %s\n", FILENAME_WRITE_BACKSORTED);
+
+    cleanup(lines, lines_count, sorted_buffer);
+    return 0;
+}
+
+int cleanup(String* lines, int lines_count, char* sorted_buffer)
+{
+    for (int i = 0; i < lines_count; ++i)
+        string_destruct(&lines[i]);
     free(lines);
     free(sorted_buffer);
+    return 0;
+}
+
+int string_ctor(String* This, const char* str)
+{
+    This->str = strdup(str);
+    if (!This->str)
+        return 1;
+    This->length = strlen(str);
+    return 0;
+}
+
+int string_destruct(String* This)
+{
+    free(This->str);
+    This->str = 0;
+    This->length = 0;
     return 0;
 }
 
@@ -83,7 +117,7 @@ int save_file(const char* filename, char* buffer, int buffer_len)
 
 // sorry, Pushkin, for non-constant buffer, but I need to replace \n and \r to \0 :(
 // replacing special symbols doesn't change your great poem!
-char** split_by_lines(char* buffer, int len, int* lines_count)
+String* split_by_lines(char* buffer, int len, int* lines_count)
 {
     *lines_count = 0;
     for (int i = 0; i < len; ++i)
@@ -93,9 +127,11 @@ char** split_by_lines(char* buffer, int len, int* lines_count)
         if ((cur_char == '\r') || (cur_char == '\n'))
             buffer[i] = '\0';
     }
-    char** text = (char**) calloc(*lines_count, sizeof(*text));
-    text[0] = buffer;
-    int text_pos = 1;
+    String* lines = (String*) calloc(*lines_count, sizeof(*lines));
+    String first_string = {"", 0};
+    string_ctor(&first_string, buffer);
+    lines[0] = first_string;
+    int lines_pos = 1;
     for (int i = 0; i < len; ++i)
     {
         char cur_char = buffer[i];
@@ -103,25 +139,25 @@ char** split_by_lines(char* buffer, int len, int* lines_count)
         {
             if (buffer[i + 1] != '\0')
             {
-                text[text_pos] = &buffer[i + 1];
-                ++text_pos;
+                String str = {"", 0};
+                string_ctor(&str, &buffer[i + 1]);
+                lines[lines_pos] = str;
+                ++lines_pos;
             }
         }
     }
-    return text;
+    return lines;
 }
 
-int alnum_strcmp(const char* str1, const char* str2) // ATTENTION! compares only alphabetical and numeric symbols!
+int alnum_strcmp(const String str1, const String str2) // ATTENTION! compares only alphabetical and numeric symbols!
 {
-    int len1 = strlen(str1);
-    int len2 = strlen(str2);
     int pos1 = 0, pos2 = 0;
-    while ((pos1 < len1) && (pos2 < len2))
+    while ((pos1 < str1.length) && (pos2 < str2.length))
     {
-        pos1 = get_next_alnum_symbol(str1, pos1);
-        pos2 = get_next_alnum_symbol(str2, pos2);
-        char sym1 = str1[pos1];
-        char sym2 = str2[pos2];
+        pos1 = get_next_alnum_symbol(str1.str, pos1);
+        pos2 = get_next_alnum_symbol(str2.str, pos2);
+        char sym1 = str1.str[pos1];
+        char sym2 = str2.str[pos2];
         if (sym1 > sym2)
             return 1;
         else if (sym1 < sym2)
@@ -129,24 +165,22 @@ int alnum_strcmp(const char* str1, const char* str2) // ATTENTION! compares only
         ++pos1;
         ++pos2;
     }
-    if ((pos1 >= len1) && (pos2 < len2))
+    if ((pos1 >= str1.length) && (pos2 < str2.length))
         return -1;
-    else if ((pos1 < len1) && (pos2 >= len2))
+    else if ((pos1 < str1.length) && (pos2 >= str2.length))
         return 1;
     return 0;
 }
 
-int alnum_strcmp_reversed(const char* str1, const char* str2) // ATTENTION! compares only alphabetical and numeric symbols!
+int alnum_strcmp_reversed(const String str1, const String str2) // ATTENTION! compares only alphabetical and numeric symbols!
 {
-    int len1 = strlen(str1);
-    int len2 = strlen(str2);
-    int pos1 = len1 - 1, pos2 = len2 - 1;
+    int pos1 = str1.length - 1, pos2 = str2.length - 1;
     while ((pos1 >= 0) && (pos2 >= 0))
     {
-        pos1 = get_next_alnum_symbol_reversed(str1, pos1);
-        pos2 = get_next_alnum_symbol_reversed(str2, pos2);
-        char sym1 = str1[pos1];
-        char sym2 = str2[pos2];
+        pos1 = get_next_alnum_symbol_reversed(str1.str, pos1);
+        pos2 = get_next_alnum_symbol_reversed(str2.str, pos2);
+        char sym1 = str1.str[pos1];
+        char sym2 = str2.str[pos2];
         if (sym1 > sym2)
             return 1;
         else if (sym1 < sym2)
@@ -187,15 +221,15 @@ int get_next_alnum_symbol(const char* str, int start_pos)
 }
 
 //TODO: write qsort here
-void sort_lines(char** lines, int len)
+void sort_lines(String* lines, int len, int (*compare)(const String str1, const String str2))
 {
     for (int i = 0; i < len - 1; ++i)
     {
         for (int j = 0; j < len - i - 1; ++j)
         {
-            if (STRCMP(lines[j], lines[j + 1]) > 0)
+            if ((*compare)(lines[j], lines[j + 1]) > 0)
             {
-                char* backup = lines[j];
+                String backup = lines[j];
                 lines[j] = lines[j + 1];
                 lines[j + 1] = backup;
             }
@@ -203,12 +237,12 @@ void sort_lines(char** lines, int len)
     }
  }
 
-void make_sorted_buffer(char** lines, int lines_len, char* sorted_buffer)
+void make_sorted_buffer(String* lines, int lines_len, char* sorted_buffer)
 {
     int buf_position = 0;
     for (int i = 0; i < lines_len; ++i)
     {
-        char* line = lines[i];
+        char* line = lines[i].str;
         int line_pos = 0;
         char sym = line[line_pos];
         while (sym != '\0')
