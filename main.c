@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <assert.h>
+#include <errno.h>
 #include <ctype.h>
 
 #define FILENAME_READ "onegin.txt"
@@ -43,7 +45,10 @@ int main()
     const char* buffer = 0;
     int buffer_len = 0;
     if (read_file(FILENAME_READ, (char**) &(buffer), &buffer_len))
+    {
+        perror("Error opening file");
         return 1;
+    }
     int lines_count = 0;
     String* lines = split_by_lines((char*) buffer, buffer_len, &lines_count);
 
@@ -65,6 +70,8 @@ int main()
 
 int cleanup(String* lines, int lines_count, char* sorted_buffer)
 {
+    assert(lines != NULL);
+    assert(sorted_buffer != NULL);
     for (int i = 0; i < lines_count; ++i)
         string_destruct(&lines[i]);
     free(lines);
@@ -74,6 +81,7 @@ int cleanup(String* lines, int lines_count, char* sorted_buffer)
 
 int string_ctor(String* This, const char* str)
 {
+    assert(This != NULL);
     This->str = strdup(str);
     if (!This->str)
         return 1;
@@ -83,6 +91,7 @@ int string_ctor(String* This, const char* str)
 
 int string_destruct(String* This)
 {
+    assert(This != NULL);
     free(This->str);
     This->str = 0;
     This->length = 0;
@@ -91,6 +100,8 @@ int string_destruct(String* This)
 
 int read_file(const char* filename, char** buf_addr, int* len)
 {
+    assert(buf_addr != NULL);
+    assert(len != NULL);
     FILE* stream = fopen(filename, "rb");
     if (!stream)
         return 1;
@@ -107,6 +118,7 @@ int read_file(const char* filename, char** buf_addr, int* len)
 
 int save_file(const char* filename, char* buffer, int buffer_len)
 {
+    assert(buffer != NULL);
     FILE* stream = fopen(filename, "wb");
     if (!stream)
         return 1;
@@ -119,6 +131,8 @@ int save_file(const char* filename, char* buffer, int buffer_len)
 // replacing special symbols doesn't change your great poem!
 String* split_by_lines(char* buffer, int len, int* lines_count)
 {
+    assert(buffer != NULL);
+    assert(lines_count != NULL);
     *lines_count = 0;
     for (int i = 0; i < len; ++i)
     {
@@ -222,12 +236,15 @@ int get_next_alnum_symbol(const char* str, int start_pos)
 
 int sort_lines(String* lines, int left, int right, int (*compare)(const String str1, const String str2))
 {
+    assert(lines != NULL);
+    assert(compare != NULL);
     int left_backup = left;
     int right_backup = right;
     String temp_for_swap = {"", 0};
     String mid = lines[(left + right) / 2];
     while (left <= right)
     {
+        assert(left <= right);
         while (((*compare)(lines[left], mid) < 0) && (left <= right_backup))
             left++;
         while (((*compare)(lines[right], mid) > 0) && (right >= left_backup))
@@ -250,6 +267,8 @@ int sort_lines(String* lines, int left, int right, int (*compare)(const String s
 
 void make_sorted_buffer(String* lines, int lines_len, char* sorted_buffer)
 {
+    assert(lines != NULL);
+    assert(sorted_buffer != NULL);
     int buf_position = 0;
     for (int i = 0; i < lines_len; ++i)
     {
